@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file-if-exists=.env server.mjs",
-    "test": "node --test server.test.mjs supabase-store.test.mjs rummikub-game.test.mjs"
+    "test": "node --test server.test.mjs supabase-store.test.mjs rummikub-game.test.mjs",
+    "build:partykub": "node scripts/build-partykub.mjs"
   },
   "engines": {
     "node": ">=20.6"

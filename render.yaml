@@ -21,3 +21,8 @@ services:
         sync: false
       - key: REELS_DELETE_PASSWORD
         sync: false
+  - type: static
+    name: partykub
+    plan: free
+    buildCommand: npm run build:partykub
+    staticPublishPath: ./dist/partykub

@@ -52,3 +52,9 @@ Git.
 Render Free puede dormir cuando no recibe tráfico y los proyectos gratuitos de
 Supabase pueden pausarse tras una semana sin actividad. Los historiales y
 videos locales existentes no se incluyen ni se migran.
+
+El mismo Blueprint publica PartyKub como un sitio estático independiente con
+el nombre `partykub`. Render ejecuta `npm run build:partykub` para copiar solo
+el juego y sus recursos públicos a `dist/partykub`; no necesita variables
+secretas ni un servidor de juego. Render muestra la URL pública al terminar el
+primer despliegue.
