@@ -58,6 +58,56 @@ test('serves the campus location logo used by the home carousel', async (t) => {
   assert.equal(image.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
 });
 
+test('uses the supplied full-width photos in each PartyKub gallery card', async () => {
+  const [page, stylesheet] = await Promise.all([
+    readFile(join(process.cwd(), 'Al-toque-pe-mejorado.html'), 'utf8'),
+    readFile(join(process.cwd(), 'partykub-game.css'), 'utf8')
+  ]);
+  const gallery = page.match(/<div className="rummikub-photo-row">([\s\S]*?)<\/div>/)?.[1];
+
+  assert.ok(gallery);
+  for (const asset of ['rummikub-campus-table-gallery.png', 'rummikub-tile-pool-gallery.png', 'rummikub-player-rack-gallery.png']) {
+    assert.ok(gallery.includes(`src="/${asset}"`));
+  }
+  assert.match(stylesheet, /\.rummikub-photo-row img\s*\{[^}]*width:\s*100%;[^}]*aspect-ratio:\s*3\s*\/\s*1;/s);
+});
+
+test('places the full PartyKub card image beside the information text', async () => {
+  const [page, stylesheet] = await Promise.all([
+    readFile(join(process.cwd(), 'Al-toque-pe-mejorado.html'), 'utf8'),
+    readFile(join(process.cwd(), 'partykub-game.css'), 'utf8')
+  ]);
+  const previewImages = page.match(/<img className="rummikub-deck-preview[^>]+>/g) ?? [];
+  const infoSection = stylesheet.match(/\.rummikub-info-section\s*\{([^}]*)\}/)?.[1];
+  const deckPreview = stylesheet.match(/\.rummikub-deck-preview\s*\{([^}]*)\}/)?.[1];
+
+  assert.equal(previewImages.length, 1);
+  assert.ok(previewImages[0].includes('src="/partykub-question-cards.png"'));
+  assert.match(page, /href="\/partykub-game\.css\?v=4"/);
+  assert.match(infoSection, /grid-template-columns:\s*minmax\(0,\s*0\.8fr\)\s*minmax\(0,\s*1\.2fr\);/);
+  assert.match(deckPreview, /width:\s*100%;/);
+  assert.match(deckPreview, /object-fit:\s*contain;/);
+  assert.doesNotMatch(deckPreview, /max-height:/);
+  assert.match(stylesheet, /@media \(max-width: 700px\)[\s\S]*?\.rummikub-info-section\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+});
+
+test('shows the supplied five-second intro before starting a solo PartyKub game', async () => {
+  const [page, stylesheet, intro, serverSource] = await Promise.all([
+    readFile(join(process.cwd(), 'Al-toque-pe-mejorado.html'), 'utf8'),
+    readFile(join(process.cwd(), 'partykub-game.css'), 'utf8'),
+    readFile(join(process.cwd(), 'partykub-solo-intro.html'), 'utf8'),
+    readFile(join(process.cwd(), 'server.mjs'), 'utf8')
+  ]);
+  assert.match(page, /const createSoloGame = async \(\) => \{\s*const result = await submit\('\/api\/rummikub\/rooms', \{ name: playerName, mode: 'solo' \}\);\s*if \(!result\) return;\s*setSoloIntroActive\(true\);/);
+  assert.match(page, /setTimeout\(\(\) => setSoloIntroActive\(false\), 5000\)/);
+  assert.match(page, /src="\/partykub-solo-intro\.html\?v=1"/);
+  assert.match(stylesheet, /\.rummikub-solo-intro-frame\s*\{[^}]*position:\s*fixed;[^}]*inset:\s*0;/s);
+  assert.match(intro, /window\.parent\.postMessage\(\{ type: 'partykub-solo-intro-started' \}/);
+  assert.match(intro, /id="cta" type="button" disabled/);
+  assert.match(serverSource, /'partykub-solo-intro\.html'/);
+  assert.match(serverSource, /assetName === 'partykub-solo-intro\.html'[\s\S]*?allowSameOriginFrame:[^\n]*partykub-solo-intro\.html/);
+});
+
 test('serves new public product and game images as PNG assets', async (t) => {
   const testDataDir = await createReelsTestDirectory();
   const server = await createReelsTestServer(t, testDataDir);
@@ -69,7 +119,7 @@ test('serves new public product and game images as PNG assets', async (t) => {
     assert.equal(response.headers.get('content-type'), 'image/png');
     assert.equal(image.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
   }
-  for (const asset of ['partykub-game-logo.png', 'partykub-questions-preview.png', 'partykub-question-cards.png', 'rummikub-campus-pair.png', 'rummikub-campus-table.png', 'rummikub-tile-pool.png', 'rummikub-player-rack.png']) {
+  for (const asset of ['partykub-game-logo.png', 'partykub-questions-preview.png', 'partykub-question-cards.png', 'rummikub-campus-pair.png', 'rummikub-campus-table.png', 'rummikub-tile-pool.png', 'rummikub-player-rack.png', 'rummikub-campus-table-gallery.png', 'rummikub-tile-pool-gallery.png', 'rummikub-player-rack-gallery.png']) {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/${asset}`);
     const image = Buffer.from(await response.arrayBuffer());
 
@@ -79,11 +129,33 @@ test('serves new public product and game images as PNG assets', async (t) => {
   }
 });
 
-test('does not expose the local PartyKub game page or its images publicly', async (t) => {
+test('serves PartyKub under the existing app and keeps its files scoped to that route', async (t) => {
   const testDataDir = await createReelsTestDirectory();
   const server = await createReelsTestServer(t, testDataDir);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  for (const path of ['/Rummikub-PartyKub-Local.html', '/PartyKub-inicio-horizontal.png', '/PartyKub-inicio-vertical.png', '/PartyKub-fondo-mesa.png']) {
+  const redirect = await fetch(`${baseUrl}/partykub`, { redirect: 'manual' });
+  assert.equal(redirect.status, 308);
+  assert.equal(redirect.headers.get('location'), '/partykub/');
+
+  const pageResponse = await fetch(`${baseUrl}/partykub/`);
+  const page = await pageResponse.text();
+  assert.equal(pageResponse.status, 200);
+  assert.match(pageResponse.headers.get('content-type'), /text\/html/);
+  assert.match(page, /src="PartyKub-3d-table\.js"/);
+
+  for (const [asset, contentType] of [
+    ['PartyKub-3d-table.js', /javascript/],
+    ['PartyKub-fondo-mesa.png', /image\/png/],
+    ['PartyKub-splash-background.png', /image\/png/],
+    ['partykub-new-logo.png', /image\/png/],
+    ['Baloo2-ExtraBold.ttf', /font\/ttf/]
+  ]) {
+    const response = await fetch(`${baseUrl}/partykub/${asset}`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), contentType);
+  }
+
+  for (const path of ['/Rummikub-PartyKub-Local.html', '/PartyKub-fondo-mesa.png', '/partykub/server.mjs']) {
     const response = await fetch(`${baseUrl}${path}`);
     assert.equal(response.status, 404);
   }
@@ -151,7 +223,7 @@ test('serves the tablet stylesheet and includes it in the application page', asy
   assert.match(stylesheet, /--tablet-brand:\s*#a50f2d/);
   assert.match(stylesheet, /--tablet-yellow-accent:\s*#ffc61a/);
   assert.match(page, /href="\/al-toque-tablet\.css\?v=112"/);
-  assert.match(page, /href="\/partykub-game\.css\?v=2"/);
+  assert.match(page, /href="\/partykub-game\.css\?v=4"/);
   const gameStylesResponse = await fetch(`${baseUrl}/partykub-game.css`);
   assert.equal(gameStylesResponse.status, 200);
   assert.equal(gameStylesResponse.headers.get('content-type'), 'text/css; charset=utf-8');

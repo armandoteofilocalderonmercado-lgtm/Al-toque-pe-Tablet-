@@ -3220,7 +3220,7 @@
     }
   </style>
   <link href="/al-toque-tablet.css?v=112" rel="stylesheet" />
-  <link href="/partykub-game.css?v=2" rel="stylesheet" />
+  <link href="/partykub-game.css?v=4" rel="stylesheet" />
 </head>
 <body class="flex items-center justify-center min-h-screen p-0 sm:p-4">
   <div id="root" class="w-full max-w-[390px] h-[100vh] sm:h-[844px] bg-white sm:rounded-[40px] shadow-2xl overflow-hidden flex flex-col border-0 sm:border-[8px] border-gray-800 relative"></div>
@@ -7987,8 +7987,29 @@
       const [busy, setBusy] = useState(false);
       const [error, setError] = useState('');
       const [notice, setNotice] = useState('');
+      const [soloIntroActive, setSoloIntroActive] = useState(false);
+      const soloIntroFrameRef = useRef(null);
+      const soloIntroTimerRef = useRef(null);
+      const soloIntroFallbackRef = useRef(null);
       const closeHandlerRef = useRef(onClose);
       closeHandlerRef.current = onClose;
+
+      useEffect(() => {
+        const handleIntroStarted = (event) => {
+          if (event.origin !== window.location.origin
+            || event.source !== soloIntroFrameRef.current?.contentWindow
+            || event.data?.type !== 'partykub-solo-intro-started') return;
+          window.clearTimeout(soloIntroFallbackRef.current);
+          window.clearTimeout(soloIntroTimerRef.current);
+          soloIntroTimerRef.current = window.setTimeout(() => setSoloIntroActive(false), 5000);
+        };
+        window.addEventListener('message', handleIntroStarted);
+        return () => {
+          window.removeEventListener('message', handleIntroStarted);
+          window.clearTimeout(soloIntroTimerRef.current);
+          window.clearTimeout(soloIntroFallbackRef.current);
+        };
+      }, []);
 
       const requestGameApi = async (path, options = {}) => {
         const response = await fetch(path, {
@@ -8089,8 +8110,11 @@
         submit('/api/rummikub/rooms', { name: playerName, mode: 'online' });
       };
 
-      const createSoloGame = () => {
-        submit('/api/rummikub/rooms', { name: playerName, mode: 'solo' });
+      const createSoloGame = async () => {
+        const result = await submit('/api/rummikub/rooms', { name: playerName, mode: 'solo' });
+        if (!result) return;
+        setSoloIntroActive(true);
+        soloIntroFallbackRef.current = window.setTimeout(() => setSoloIntroActive(false), 6500);
       };
 
       const joinRoom = () => {
@@ -8181,6 +8205,16 @@
       const tileName = (tile) => tile.joker ? '★' : tile.value;
       const tileColorClass = (tile) => tile.joker ? 'rummikub-tile--joker' : `rummikub-tile--${tile.color}`;
 
+      if (soloIntroActive) {
+        return ReactDOM.createPortal(
+          <div className="rummikub-overlay rummikub-solo-intro" role="dialog" aria-modal="true" aria-label="Introducción de PartyKub">
+            <iframe ref={soloIntroFrameRef} className="rummikub-solo-intro-frame" src="/partykub-solo-intro.html?v=1" title="Pantalla de inicio de PartyKub" />
+            <button type="button" className="rummikub-icon-button" onClick={onClose} aria-label="Cerrar introducción">×</button>
+          </div>,
+          document.body
+        );
+      }
+
       if (!session || !gameState) {
         return ReactDOM.createPortal(
           <div className="rummikub-overlay">
@@ -8213,13 +8247,12 @@
                 </div>
                 <div className="rummikub-info-section">
                   <div><span className="rummikub-kicker">Las cartas de la mesa</span><h2>Preguntas para conocerse</h2><p>La respuesta es oral, no se guarda. Si alguien prefiere no responder, puede pasar con la penalización de fichas acordada.</p></div>
-                  <img className="rummikub-deck-preview" src="/partykub-question-cards.png" alt="Mazo de preguntas PartyKub con reversos de marca" />
-                  <img className="rummikub-deck-preview rummikub-deck-preview--alternate" src="/partykub-questions-preview.png" alt="Vista adicional de las cartas de preguntas PartyKub" />
+                  <img className="rummikub-deck-preview" src="/partykub-question-cards.png" alt="Mazo completo de cartas de preguntas PartyKub" />
                 </div>
                 <div className="rummikub-photo-row">
-                  <figure><img src="/rummikub-campus-table.png" alt="Cuatro estudiantes jugando en una mesa del campus" /><figcaption>Una mesa para cuatro</figcaption></figure>
-                  <figure><img src="/rummikub-tile-pool.png" alt="Fichas Rummikub en la reserva" /><figcaption>Reserva compartida</figcaption></figure>
-                  <figure><img src="/rummikub-player-rack.png" alt="Fichas ocultas en el soporte de un jugador" /><figcaption>Tu soporte es privado</figcaption></figure>
+                  <figure><img src="/rummikub-campus-table-gallery.png" alt="Cuatro estudiantes jugando en una mesa del campus" /><figcaption>Una mesa para cuatro</figcaption></figure>
+                  <figure><img src="/rummikub-tile-pool-gallery.png" alt="Fichas Rummikub en la reserva" /><figcaption>Reserva compartida</figcaption></figure>
+                  <figure><img src="/rummikub-player-rack-gallery.png" alt="Fichas ocultas en el soporte de un jugador" /><figcaption>Tu soporte es privado</figcaption></figure>
                 </div>
               </div>
               {(error || notice) && <p className={`rummikub-feedback ${error ? 'is-error' : ''}`} role="status">{error || notice}</p>}

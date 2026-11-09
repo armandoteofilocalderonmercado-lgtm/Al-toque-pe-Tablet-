@@ -13,6 +13,21 @@ const APP_DIR = fileURLToPath(new URL('.', import.meta.url));
 const HTML_FILE = 'Al-toque-pe-mejorado.html';
 const AUDIOMACK_TERMS_FILE = 'audiomack-player-terms.html';
 const COIN_FILE = 'Moneda Al Toque.html';
+const PARTYKUB_PAGE_FILE = 'Rummikub-PartyKub-Local.html';
+const PARTYKUB_ASSETS = new Set([
+  'Baloo2-ExtraBold.ttf',
+  'PartyKub-3d-table.js',
+  'PartyKub-fondo-mesa.png',
+  'PartyKub-splash-background.png',
+  'PartyKub-splash-balloon.png',
+  'PartyKub-splash-four-tile-crop.png',
+  'PartyKub-splash-hat.png',
+  'PartyKub-splash-left-tiles.png',
+  'PartyKub-splash-rainbow-ribbon.png',
+  'PartyKub-splash-star.png',
+  'PartyKub-splash-word-hd.png',
+  'partykub-new-logo.png'
+]);
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || '0.0.0.0';
 const APP_SERVER_URL = (process.env.APP_SERVER_URL || '').replace(/\/+$/, '');
@@ -107,12 +122,16 @@ const PUBLIC_ASSETS = new Set([
   'desayuno-emoliente-pan-queso-nueva.png',
   'partykub-game-logo.png',
   'partykub-game.css',
+  'partykub-solo-intro.html',
   'partykub-questions-preview.png',
   'partykub-question-cards.png',
   'rummikub-campus-pair.png',
   'rummikub-campus-table.png',
   'rummikub-tile-pool.png',
   'rummikub-player-rack.png',
+  'rummikub-campus-table-gallery.png',
+  'rummikub-tile-pool-gallery.png',
+  'rummikub-player-rack-gallery.png',
   'partykub-logo.png',
   'Combo costa.png',
   'combo fitness.jpg',
@@ -1881,6 +1900,50 @@ async function handleRequest(request, response, orders, idempotencyKeys, callSes
   }
 
   if (request.method === 'GET') {
+    if (requestUrl.pathname === '/partykub') {
+      response.writeHead(308, { Location: '/partykub/' });
+      return response.end();
+    }
+
+    if (requestUrl.pathname === '/partykub/') {
+      let content;
+      try {
+        content = await readFile(join(APP_DIR, PARTYKUB_PAGE_FILE));
+      } catch (error) {
+        if (error.code === 'ENOENT') return json(response, 404, { error: 'No se encontró PartyKub.' });
+        throw error;
+      }
+      return sendHtml(request, response, content, { cacheKey: 'html:partykub' });
+    }
+
+    if (requestUrl.pathname.startsWith('/partykub/')) {
+      let assetName;
+      try {
+        assetName = decodeURIComponent(requestUrl.pathname.slice('/partykub/'.length));
+      } catch {
+        return json(response, 400, { error: 'Ruta no válida.' });
+      }
+      if (basename(assetName) !== assetName || !PARTYKUB_ASSETS.has(assetName)) {
+        return json(response, 404, { error: 'No se encontró el recurso solicitado.' });
+      }
+      try {
+        const content = await readFile(join(APP_DIR, assetName));
+        const types = {
+          '.js': 'text/javascript; charset=utf-8',
+          '.png': 'image/png',
+          '.ttf': 'font/ttf'
+        };
+        return sendStaticContent(request, response, content, {
+          'Content-Type': types[extname(assetName)] || 'application/octet-stream',
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'public, max-age=3600'
+        }, `partykub:${assetName}`);
+      } catch (error) {
+        if (error.code === 'ENOENT') return json(response, 404, { error: 'No se encontró el recurso solicitado.' });
+        throw error;
+      }
+    }
+
     if (requestUrl.pathname === '/al-toque-tablet.css') {
       let content;
       try {
@@ -1999,9 +2062,9 @@ async function handleRequest(request, response, orders, idempotencyKeys, callSes
       const fileInfo = await stat(filePath);
       if (!fileInfo.isFile()) return json(response, 404, { error: 'No se encontró el recurso solicitado.' });
       const content = await readFile(filePath);
-      if (assetName === HTML_FILE || assetName === AUDIOMACK_TERMS_FILE || assetName === COIN_FILE) {
+      if (assetName === HTML_FILE || assetName === AUDIOMACK_TERMS_FILE || assetName === COIN_FILE || assetName === 'partykub-solo-intro.html') {
         return sendHtml(request, response, content, {
-          allowSameOriginFrame: assetName === COIN_FILE,
+          allowSameOriginFrame: assetName === COIN_FILE || assetName === 'partykub-solo-intro.html',
           cacheKey: `html:${assetName}`
         });
       }
