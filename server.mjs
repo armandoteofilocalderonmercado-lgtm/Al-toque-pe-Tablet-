@@ -94,6 +94,7 @@ const PUBLIC_ASSETS = new Set([
   AUDIOMACK_TERMS_FILE,
   COIN_FILE,
   'coin-front-red.png',
+  'yape-globo.jpg',
   'al-toque-pe-logo.png',
   'al-toque-pe-emblema.png',
   'al-toque-reel-watermark.png',
@@ -1535,7 +1536,14 @@ async function handleRequest(request, response, orders, idempotencyKeys, callSes
     };
     orders.set(order.id, order);
     if (idempotencyKey) idempotencyKeys.set(idempotencyKey, order.id);
-    await persistOrders();
+    try {
+      await persistOrders();
+    } catch (error) {
+      orders.delete(order.id);
+      if (idempotencyKey) idempotencyKeys.delete(idempotencyKey);
+      console.error('No se pudo guardar el pedido en la persistencia compartida:', error.message);
+      return json(response, 503, { error: 'No se pudo guardar el pedido compartido ahora. Inténtalo nuevamente en unos segundos.' });
+    }
     notifyOrderChange('order.created', order);
     return json(response, 201, { order });
   }
