@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { composePrompt, createAlToqueServer, detectMenuIntent, getAssistantPersona, getLocalMenuAnswer, makeRiderSupportInstructions, selectMenuItem, shouldUseWebSearch, styleLocalAnswer } from './server.mjs';
+import { composePrompt, createAlToqueServer, createWebSearchPlan, detectMenuIntent, getAssistantPersona, getLocalMenuAnswer, makeRiderSupportInstructions, selectMenuItem, shouldUseWebSearch, styleLocalAnswer } from './server.mjs';
 
 async function createReelsTestServer(t, testDataDir, reelsDeletePassword = 'test-reels-delete-password', persistenceStore, fetchImpl = fetch) {
   const server = createAlToqueServer({
@@ -1090,11 +1090,42 @@ test('answers simple menu questions locally without requesting web search', () =
 
 test('reserves web search for current or complex questions', () => {
   assert.equal(shouldUseWebSearch('¿Cuál es el tipo de cambio actual?'), true);
+  assert.equal(shouldUseWebSearch('¿Cuál es el precio del dólar hoy en Perú?'), true);
   assert.equal(shouldUseWebSearch('Explica por qué cambia el clima y compara las causas principales'), true);
   assert.equal(shouldUseWebSearch('Hola, ¿cómo estás?'), false);
   assert.equal(shouldUseWebSearch('¿Qué incluye el Combo Fitness?'), false);
+  assert.equal(shouldUseWebSearch('¿Qué bebidas ofrecen hoy?'), false);
+  assert.equal(shouldUseWebSearch('¿Cuánto cuesta el lomo saltado hoy?'), false);
   assert.equal(getLocalMenuAnswer('¿Cuál es el origen histórico del ceviche?'), null);
   assert.equal(shouldUseWebSearch('¿Cuál es el origen histórico del ceviche?'), true);
+});
+
+test('routes ChatGPT and Gemini web searches through Botpress', () => {
+  const expectedHandoff = {
+    reply: '',
+    sources: [],
+    intent: 'ninguna',
+    dishId: null,
+    webSearchUsed: true,
+    handoffToBotpress: true,
+    engine: 'Botpress Web Search'
+  };
+  for (const provider of ['ChatGPT', 'Gemini']) {
+    const plan = createWebSearchPlan(provider, 'menu', '¿Cuál es el precio del dólar hoy en Perú?');
+    assert.equal(plan.webSearch, true);
+    assert.equal(plan.openAIWebSearch, false);
+    assert.deepEqual(plan.handoff, expectedHandoff);
+  }
+
+  const normalGemini = createWebSearchPlan('Gemini', 'menu', '¿Qué es una nebulosa?');
+  assert.equal(normalGemini.webSearch, false);
+  assert.equal(normalGemini.openAIWebSearch, false);
+  assert.equal(normalGemini.handoff, null);
+
+  const riderSupport = createWebSearchPlan('Gemini', 'rider-support', '¿Cuál es el precio del dólar hoy en Perú?');
+  assert.equal(riderSupport.webSearch, false);
+  assert.equal(riderSupport.openAIWebSearch, false);
+  assert.equal(riderSupport.handoff, null);
 });
 
 test('uses one OpenAI-backed assistant with three distinct response personas', () => {

@@ -14,6 +14,7 @@ las rutas `/api`; no se puede alojar como una pagina estatica en GitHub Pages.
 - En Perfil, la suscripción a promociones está desmarcada hasta que el usuario la autoriza. Al activarla, la app valida y envía el correo de confirmación al servicio oficial de Al Toque; cambiar la dirección revoca el consentimiento anterior.
 - En Pedido, elige el punto de recojo entre la puerta principal, el patio y el área de tutoría; la selección se comparte con el repartidor y aparece en el seguimiento.
 - En Menú, busca platos, combos o bebidas; si no hay coincidencias, la app lo indica y permite limpiar la búsqueda. Los filtros anuncian la categoría seleccionada.
+- En el chat, ChatGPT y Gemini envían preguntas de actualidad a la búsqueda web de Botpress y muestran sus fuentes; las consultas del menú siguen usando los datos locales.
 - Copia `.env.example` a `.env` para configurar integraciones opcionales.
 - Define `REELS_DELETE_PASSWORD` con una clave privada para habilitar la
   eliminacion de Reels. Sin ella, esa operacion falla de forma cerrada.

@@ -234,7 +234,7 @@ export function selectMenuItem(intent, text) {
 
 const MENU_QUESTION_TERMS = /\b(menu|carta|comedor|plato|platos|comida|comidas|bebida|bebidas|combo|combos|lomo saltado|quinua|ceviche|chicha morada|maracuya|precios|precio|cuesta|cuestan|disponible|disponibles|ofrecen|tienen|hay|ingrediente|ingredientes|incluye|incluyen|demora|rapido|rapida)\b/;
 const LOCAL_MENU_INTENT_TERMS = /\b(recomiend\w*|recomend\w*|quiero|busco|antojo|hambre|sed|tomar|beber|comer|almorz\w*|cen\w*|precio|cuesta|cuestan|disponible|disponibles|ofrecen|tienen|hay|ingrediente|ingredientes|incluye|incluyen|demora|rapido|rapida|presupuesto|ligero|fresco|menu|carta|que opciones|cuales opciones|que bebidas|que platos|que combos)\b/;
-const WEB_SEARCH_TERMS = /\b(actual|actualmente|ahora|reciente|recientemente|ultimo|ultima|ultimos|ultimas|noticia|noticias|202[4-9]|203\d|fecha de|precio actual|cotizacion|tipo de cambio|clima|pronostico|resultado|resultados|quien gano|quien es el presidente|fuente|fuentes|cita|citas|investiga|investigacion|evidencia|estudio|estudios|paper|papers|ley vigente|reglamento vigente|actualizacion)\b/;
+const WEB_SEARCH_TERMS = /\b(hoy|actual|actualmente|ahora|reciente|recientemente|ultimo|ultima|ultimos|ultimas|noticia|noticias|202[4-9]|203\d|fecha de|precio actual|dolar(?:es)?|soles|cotizacion|inflacion|tipo de cambio|clima|pronostico|resultado|resultados|quien gano|quien es el presidente|fuente|fuentes|cita|citas|investiga|investigacion|evidencia|estudio|estudios|paper|papers|ley vigente|reglamento vigente|actualizacion)\b/;
 const COMPLEX_QUESTION_TERMS = /\b(por que|como funciona|explica|explicame|compara|comparacion|diferencia|diferencias|analiza|analisis|evalua|evaluacion|impacto|causa|causas|consecuencia|consecuencias|ventaja|ventajas|desventaja|desventajas|paso a paso|en profundidad|profundiza|argumenta|demuestra|resuelve|calcula|interpreta|relacion entre|que implicaciones|cual es mejor|recomiendame una estrategia|origen|historia|receta|calorias|nutricion|salud|preparacion|significado)\b/;
 const SIMPLE_GREETINGS = /^(hola|buenas|buenos dias|buenas tardes|buenas noches|gracias|muchas gracias|ok|okay|listo|chau|adios)[!.? ]*$/;
 const ASSISTANT_PERSONAS = {
@@ -261,6 +261,24 @@ export function shouldUseWebSearch(text) {
   return words >= 18 && /[?¿]/.test(text);
 }
 
+export function createWebSearchPlan(provider, assistantMode, text) {
+  const webSearch = assistantMode === 'menu' && shouldUseWebSearch(text);
+  const handoffToBotpress = webSearch && ['ChatGPT', 'Gemini'].includes(provider);
+  return {
+    webSearch,
+    openAIWebSearch: webSearch && !['ChatGPT', 'Gemini'].includes(provider),
+    handoff: handoffToBotpress ? {
+      reply: '',
+      sources: [],
+      intent: 'ninguna',
+      dishId: null,
+      webSearchUsed: true,
+      handoffToBotpress: true,
+      engine: 'Botpress Web Search'
+    } : null
+  };
+}
+
 export function getLocalMenuAnswer(text) {
   const query = normalize(text);
   const mentionsMenu = MENU_QUESTION_TERMS.test(query);
@@ -271,7 +289,7 @@ export function getLocalMenuAnswer(text) {
       intent: 'ninguna'
     };
   }
-  if (WEB_SEARCH_TERMS.test(query) || COMPLEX_QUESTION_TERMS.test(query)) return null;
+  if (COMPLEX_QUESTION_TERMS.test(query) || (WEB_SEARCH_TERMS.test(query) && !mentionsMenu)) return null;
   const intent = detectMenuIntent(text);
   const product = MENU.find((item) => query.includes(normalize(item.name)))
     || MENU_ALIASES.map((alias) => ({
@@ -1298,8 +1316,11 @@ async function handleRequest(request, response, orders, idempotencyKeys, callSes
         gemini: openAIAvailable,
         sharedOpenAI: openAIAvailable
       },
+      capabilities: {
+        botpressWebSearch: true
+      },
       personas: Object.keys(ASSISTANT_PERSONAS),
-      engine: 'OpenAI API'
+      engine: openAIAvailable ? 'OpenAI API + Botpress Web Search' : 'Botpress Web Search'
     });
   }
 
@@ -1870,18 +1891,21 @@ async function handleRequest(request, response, orders, idempotencyKeys, callSes
         ))
         .sort((first, second) => second.count - first.count)[0]?.item
       : null;
-    const dish = assistantMode === 'menu' ? previousFavorite || selectMenuItem(intent, text) : null;
-    const webSearch = assistantMode === 'menu' && shouldUseWebSearch(text);
+    const searchPlan = createWebSearchPlan(provider, assistantMode, text);
+    const dish = assistantMode === 'menu' && !searchPlan.handoff
+      ? previousFavorite || selectMenuItem(intent, text)
+      : null;
     const memory = typeof body.memory === 'string' ? body.memory : '';
+    if (searchPlan.handoff) return json(response, 200, searchPlan.handoff);
     try {
-      const answer = await askOpenAI(text, body.history, memory, dish, webSearch, provider, orderHistory, assistantMode, openAIApiKey, fetchImpl);
+      const answer = await askOpenAI(text, body.history, memory, dish, searchPlan.openAIWebSearch, provider, orderHistory, assistantMode, openAIApiKey, fetchImpl);
       return json(response, 200, {
         reply: answer.reply,
         sources: answer.sources,
         intent,
         dishId: dish?.id || null,
-        webSearchUsed: webSearch,
-        engine: 'OpenAI API'
+        webSearchUsed: searchPlan.webSearch,
+        engine: searchPlan.openAIWebSearch ? 'OpenAI API (Web Search)' : 'OpenAI API'
       });
     } catch (error) {
       if (assistantMode === 'rider-support') {
