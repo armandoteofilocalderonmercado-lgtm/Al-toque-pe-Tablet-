@@ -57,6 +57,26 @@ test('serves the campus location logo used by the home carousel', async (t) => {
   assert.equal(response.headers.get('content-type'), 'image/png');
   assert.equal(image.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
 });
+test('serves the animated tutorial mascots and exposes the replayable tutorial', async (t) => {
+  const testDataDir = await createReelsTestDirectory();
+  const server = await createReelsTestServer(t, testDataDir);
+  const page = await readFile(join(process.cwd(), 'Al-toque-pe-mejorado.html'), 'utf8');
+
+  assert.match(page, /function TutorialModal/);
+  assert.match(page, /Skip \{'>>'\}/);
+  assert.match(page, /altoque_tutorial_completed_v1/);
+  assert.match(page, /Ver tutorial paso a paso/);
+
+  for (let index = 1; index <= 6; index += 1) {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/tutorial-mascot-${index}.png`);
+    const image = Buffer.from(await response.arrayBuffer());
+
+    assert.equal(response.status, 200, `tutorial mascot ${index} should be served`);
+    assert.equal(response.headers.get('content-type'), 'image/png');
+    assert.equal(image.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  }
+});
+
 
 test('uses the supplied full-width photos in each PartyKub gallery card', async () => {
   const [page, stylesheet] = await Promise.all([
